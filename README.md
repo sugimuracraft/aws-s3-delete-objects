@@ -50,14 +50,6 @@ $ cat list.txt \
 ```
 
 ## delete versioned objects.
-* list.txt
-```
-path/to/delete/1.txt
-path/to/delete/2.txt
-path/to/delete/3.txt
-dir/to/delete
-```
-
 ```bash
 $ node index.js \
     --profile "example-account" \

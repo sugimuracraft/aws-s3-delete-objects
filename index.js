@@ -43,9 +43,6 @@ AWS.config.credentials = new AWS.SharedIniFileCredentials({
 });
 const s3 = new AWS.S3({apiVersion: '2006-03-01'});
 
-const bucket = options.bucket;
-const prefix = options.prefix;
-
 const maxKeys = 1000;
 let targetObjects = [];
 let nextContinuationToken = '';
@@ -76,8 +73,8 @@ const listObjects = () => {
           return;
         }
         const params = {
-          Bucket: bucket, 
-          Prefix: prefix,
+          Bucket: options['bucket'], 
+          Prefix: options['prefix'],
           MaxKeys: maxKeys
         };
         if (nextContinuationToken !== '') {
@@ -103,9 +100,9 @@ const listObjects = () => {
           console.log(`---- queued targetObjects length=${targetObjects.length}`);
           if (!data.NextContinuationToken) {
             nextContinuationToken = null;
-          } else {
-            nextContinuationToken = data.NextContinuationToken;
+            return;
           }
+          nextContinuationToken = data.NextContinuationToken;
           subtask()
           .then(resolve)
           .catch(reject);
@@ -116,7 +113,6 @@ const listObjects = () => {
     subtask()  // begin first task.
     .then(resolve)  // resolved when all task done.
     .catch(reject);
-  
   });
 }
 
@@ -142,8 +138,8 @@ const listObjectVersions = () => {
           return;
         }
         const params = {
-          Bucket: bucket, 
-          Prefix: prefix,
+          Bucket: options['bucket'], 
+          Prefix: options['prefix'],
           MaxKeys: maxKeys
         };
         if (nextVersionIdMarker !== '') {
@@ -154,33 +150,33 @@ const listObjectVersions = () => {
           if (err) {
             console.error(err, err.stack);
             reject();
+            return;
           }
-          else {
-            console.log(`-- end listObjectVersions, Count=${data.Versions.length}. NextVersionIdMarker=${data.NextVersionIdMarker}`);
-            if (data.Versions.length <= 0) {
-              nextKeyMarker = null;
-              nextVersionIdMarker = null;
-              resolve();
-              return;
-            }
-            targetObjects = targetObjects.concat(data.Versions.map((object) => {
-              return {
-                versionId: object.VersionId,
-                lastModified: object.LastModified
-              };
-            }));
-            console.log(`---- queued targetObjects length=${targetObjects.length}`);
-            if (!data.NextVersionIdMarker) {
-              nextKeyMarker = null;
-              nextVersionIdMarker = null;
-            } else {
-              nextKeyMarker = data.NextKeyMarker;
-              nextVersionIdMarker = data.NextVersionIdMarker;
-            }
-            subtask()
-            .then(resolve)
-            .catch(reject);
+          console.log(`-- end listObjectVersions, Count=${data.Versions.length}. NextVersionIdMarker=${data.NextVersionIdMarker}`);
+          if (data.Versions.length <= 0) {
+            nextKeyMarker = null;
+            nextVersionIdMarker = null;
+            resolve();
+            return;
           }
+          targetObjects = targetObjects.concat(data.Versions.map((object) => {
+            console.log(`Key=${object.Key}`);
+            return {
+              Key: object.Key,
+              VersionId: object.VersionId
+            };
+          }));
+          console.log(`---- queued targetObjects length=${targetObjects.length}`);
+          if (!data.NextVersionIdMarker) {
+            nextKeyMarker = null;
+            nextVersionIdMarker = null;
+            return;
+          }
+          nextKeyMarker = data.NextKeyMarker;
+          nextVersionIdMarker = data.NextVersionIdMarker;
+          subtask()
+          .then(resolve)
+          .catch(reject);
         });
       });
     }
@@ -188,7 +184,6 @@ const listObjectVersions = () => {
     subtask()  // begin first task.
     .then(resolve)  // resolved when all task done.
     .catch(reject);
-  
   });
 }
 
@@ -211,14 +206,14 @@ const deleteObjects = () => {
           const id = setInterval(() => {
             clearInterval(id);
             subtask()
-              .then(resolve)
-              .catch(reject);
+            .then(resolve)
+            .catch(reject);
           }, 1000 * 2);
           return;
         }
         const objects = targetObjects.splice(0, 1000);
         const params = {
-          Bucket: bucket, 
+          Bucket: options['bucket'], 
           Delete: {
             Objects: objects.map((object) => {
               if (!object.hasOwnProperty('VersionId')) {
@@ -238,14 +233,13 @@ const deleteObjects = () => {
           if (err) {
             console.log(err, err.stack); // an error occurred.
             reject();
+            return;
           }
-          else {
-            totalCount += objects.length;
-            console.log(`LastDeleted LastModified: ${objects[objects.length - 1].lastModified}, totalCount=${totalCount}`);
-            subtask()
-              .then(resolve)
-              .catch(reject);
-          }
+          totalCount += objects.length;
+          console.log(`LastDeleted LastModified: ${objects[objects.length - 1].lastModified}, totalCount=${totalCount}`);
+          subtask()
+          .then(resolve)
+          .catch(reject);
         });
       });
     };
@@ -253,12 +247,11 @@ const deleteObjects = () => {
     subtask()  // begin first task.
     .then(resolve)  // resolved when all task done.
     .catch(reject);
-
   });
 }
 
 let listTask;
-if (options.versions) {
+if (options['versions']) {
   listTask = listObjectVersions;
   // force complete about listObjects.
   nextContinuationToken = null;
